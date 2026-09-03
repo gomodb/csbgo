@@ -1,0 +1,54 @@
+version: "2"
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - gocyclo
+    - dupl
+    - gosec
+    - misspell
+    - unparam
+    - ineffassign
+    - wsl_v5
+    - exptostd
+    - modernize
+    - nonamedreturns
+    - intrange
+    - copyloopvar
+    - errorlint
+    - usetesting
+
+  settings:
+    gocyclo:
+      # 20 为项目阈值：Go 逐步骤错误处理（if err != nil）会线性抬高圈复杂度，
+      # 15 会把大量「杆式错误处理样板」误报为复杂函数；20 以上才视为真复杂、需要拆分评审。
+      min-complexity: 20
+  
+  exclusions:
+    rules:
+      - path: integration_test\.go
+        linters:
+          - gosec
+      - path: signature\.go
+        linters:
+          - gosec
+
+formatters:
+  enable:
+    - gofumpt
+    - gci
+    - golines
+
+  settings:
+    gci:
+      sections:
+        - standard # 标准库
+        - default # 第三方库
+        - prefix(csbgo) # 本地库
+      custom-order: true
+    gofumpt:
+      module-path: csbgo
+      extra:
+        group-params: true

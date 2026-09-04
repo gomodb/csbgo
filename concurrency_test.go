@@ -45,8 +45,8 @@ func TestClientConcurrentUse(t *testing.T) {
 				return
 			}
 
-			if resp.String() != "ok" || !resp.OK() {
-				errs <- fmt.Errorf("worker %d: bad response %q", n, resp.String())
+			if resp.ToString() != "ok" || !resp.OK() {
+				errs <- fmt.Errorf("worker %d: bad response %q", n, resp.ToString())
 			}
 		}(i)
 	}

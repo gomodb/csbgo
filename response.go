@@ -1,7 +1,7 @@
 package csbgo
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 )
@@ -16,14 +16,23 @@ type Response struct {
 	StatusCode int
 }
 
-// String returns the response body as a string.
-func (r *Response) String() string { return string(r.Body) }
+// ToString returns the response body as a string.
+func (r *Response) ToString() string { return string(r.Body) }
+
+// ToBytes returns the raw response body.
+func (r *Response) ToBytes() []byte { return r.Body }
 
 // OK reports whether the response carries a 2xx status code.
 func (r *Response) OK() bool { return r.StatusCode >= 200 && r.StatusCode < 300 }
 
-// JSON unmarshals the response body into v.
-func (r *Response) JSON(v any) error { return json.Unmarshal(r.Body, v) }
+// ToJSON unmarshals the response body into v.
+func (r *Response) ToJSON(v any) error {
+	if err := json.Unmarshal(r.Body, v); err != nil {
+		return wrapError(err, "decode response body")
+	}
+
+	return nil
+}
 
 // StatusError is returned by Client.Do for responses whose status code is not
 // accepted by the client's status check (a 2xx-only check by default). It wraps

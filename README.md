@@ -2,11 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go Reference](https://pkg.go.dev/badge/github.com/gomodb/csbgo.svg)](https://pkg.go.dev/github.com/gomodb/csbgo)
-[![Go Report Card](https://goreportcard.com/badge/github.com/gomodb/csbgo)](https://goreportcard.com/report/github.com/gomodb/csbgo)
 
 一个纯 Go 标准库实现的 **CSB（云服务总线）HTTP 服务调用客户端**，无任何第三方依赖。
-
-参考了阿里云 `csb-sdk/others/golang` 的调用实现，保留了其签名协议（HMAC-SHA1 + 字典序规范化），同时修复了原实现中的多处问题（JSON 判断写反、硬编码 `ResponseHeaderTimeout`、GET 请求携带 body、全局可变默认值等），并提供了更符合 Go 习惯、更易上手的 API。
 
 ## 安装
 
@@ -14,7 +11,7 @@
 go get github.com/gomodb/csbgo
 ```
 
-模块只依赖 Go 标准库，不引入任何第三方依赖。
+模块只依赖 Go 标准库，不引入任何第三方依赖。要求 **Go 1.27+**（使用标准库 `encoding/json/v2`）。
 
 ## 签名协议（与原实现的兼容性）
 
@@ -61,7 +58,7 @@ func main() {
   // 含传输错误与非 2xx 状态错误
   log.Fatalf("call failed: %v", err)
  }
- log.Println(resp.String())
+ log.Println(resp.ToString())
 }
 ```
 
@@ -105,20 +102,30 @@ r2 := base.Clone().Path("orders/").WithQueryInt("page", 2)
 - `error` 非空 = 本地失败（参数/URL/序列化/传输重试耗尽）**或**状态码检查失败。
 - **默认只接受 2xx**：非 2xx 返回一个 `*StatusError`（`errors.As` 可取出，其 `Response` 字段携带完整状态码/响应头/响应体），方便读取 CSB 返回的错误详情。
 - 用 `WithStatusCheck(nil)` 关闭检查（恢复为“任何响应都 nil error”），或用 `WithStatusCheck(csbgo.AcceptStatus(200, 201, 204))` 自定义。
-- `Response` 提供 `String()`、`OK()`、`JSON(&v)` 便捷方法。
+- `Response` 提供 `ToString()`、`ToBytes()`、`ToJSON(&v)`、`OK()` 便捷方法。
 
 ```go
 resp, err := client.Do(ctx, req)
 if err != nil {
  var se *csbgo.StatusError
  if errors.As(err, &se) {
-  log.Printf("broker 返回 %d：%s", se.Response.StatusCode, se.Response.String())
+  log.Printf("broker 返回 %d：%s", se.Response.StatusCode, se.Response.ToString())
  }
  return err
 }
 var out struct{ Code int `json:"code"` }
-_ = resp.JSON(&out)
+_ = resp.ToJSON(&out)
 ```
+
+### `Client.DoJSON(ctx, req, out) (*Response, error)`
+
+一步到位：执行请求 + 状态检查通过后，把响应体 JSON 反序列化到 `out`。状态检查失败仍返回 `*StatusError`（此时 `out` 不被修改），反序列化失败返回 `*StatusError` 之外的 `*Error`。
+
+```go
+var out struct{ Code int `json:"code"` }
+if _, err := client.DoJSON(ctx, req, &out); err != nil {
+    // ...
+}
 
 ## 复用与并发
 
@@ -156,6 +163,18 @@ func GetUser(ctx context.Context, id int) (*User, error) {
 | POST + `WithBody` | 追加到 URL | 自定义 Content-Type 请求体 | 原始字节 |
 
 > 无论发送路径如何，query 与 form 参数都会一并进入签名，这与 CSB broker 对“参与签名参数”的要求一致。
+
+## JSON 处理（encoding/json/v2）
+
+本库的请求序列化（`WithJSON`）与响应反序列化（`ToJSON` / `DoJSON`）使用 Go 1.27 起提供的标准库 **`encoding/json/v2`**，零第三方依赖，默认构建即可使用。
+
+相对老 `encoding/json`（v1）的行为差异：
+
+- **重复键**：JSON 对象中出现重复键时，v1 静默保留最后一个值；v2 直接报错。
+- **非法 UTF-8**：JSON 字符串中的非法 UTF-8 会被 v2 拒绝。
+- **错误信息文本**可能不同（前缀如 `jsontext:`）。
+
+> 因此，`resp.ToJSON(&out)` 对「响应体含重复键 / 非法 UTF-8」会返回错误。若你的 CSB 返回体确实可能包含重复键，请在解码前自行规范化，或解码到 `map[string]json.RawMessage` 后按需处理。
 
 ## 运行测试
 

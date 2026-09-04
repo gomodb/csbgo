@@ -52,8 +52,8 @@ func TestClientSignsAndSends(t *testing.T) {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}
 
-	if resp.String() != `{"result":"pong"}` {
-		t.Fatalf("body = %q", resp.String())
+	if resp.ToString() != `{"result":"pong"}` {
+		t.Fatalf("body = %q", resp.ToString())
 	}
 
 	if resp.Header.Get("x-csb") != "ok" {
@@ -199,8 +199,8 @@ func TestClientStatusErrorByDefault(t *testing.T) {
 		t.Error("StatusError does not carry the response")
 	}
 
-	if resp.StatusCode != 404 || resp.String() != "not found" {
-		t.Errorf("response wrong: status=%d body=%q", resp.StatusCode, resp.String())
+	if resp.StatusCode != 404 || resp.ToString() != "not found" {
+		t.Errorf("response wrong: status=%d body=%q", resp.StatusCode, resp.ToString())
 	}
 
 	if !strings.Contains(err.Error(), "404") {
@@ -336,8 +336,8 @@ func TestClientCustomTransport(t *testing.T) {
 		t.Fatalf("Do() error = %v", err)
 	}
 
-	if resp.String() != "mocked" {
-		t.Errorf("body = %q", resp.String())
+	if resp.ToString() != "mocked" {
+		t.Errorf("body = %q", resp.ToString())
 	}
 
 	if resp.Header.Get("X-Mock") != "1" {

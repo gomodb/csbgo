@@ -181,6 +181,23 @@ func (c *Client) Do(ctx context.Context, req *Request) (*Response, error) {
 	return resp, nil
 }
 
+// DoJSON performs Do and, on success, decodes the response body as JSON into
+// out. The status check still applies: a rejected status is returned as a
+// *StatusError and out is left untouched. Deserialization errors surface as an
+// *Error wrapping the encoding/json error.
+func (c *Client) DoJSON(ctx context.Context, req *Request, out any) (*Response, error) {
+	resp, err := c.Do(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+
+	if err := resp.ToJSON(out); err != nil {
+		return resp, err
+	}
+
+	return resp, nil
+}
+
 // send performs the request with retries and returns the final response, or a
 // transport error. It never applies the status check.
 func (c *Client) send(

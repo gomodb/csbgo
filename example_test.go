@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	csbgo "github.com/gomodb/csbgo"
+	"github.com/gomodb/csbgo"
 )
 
 // ExampleClient demonstrates the recommended way to configure a Client and
@@ -30,7 +30,31 @@ func ExampleClient() {
 		log.Fatalf("call failed: %v", err)
 	}
 
-	fmt.Println(resp.String())
+	fmt.Println(resp.ToString())
+}
+
+// ExampleClient_DoJSON shows a one-step request + JSON decode via Client.DoJSON.
+func ExampleClient_DoJSON() {
+	client := csbgo.New(
+		csbgo.WithBaseURL("http://broker.example.com/CSB"),
+		csbgo.WithAK("ak"),
+		csbgo.WithSK("sk"),
+	)
+
+	var out map[string]any
+
+	_, err := client.DoJSON(context.Background(),
+		csbgo.NewRequest(csbgo.MethodPost).
+			WithAPI("Echo").
+			WithVersion("v1").
+			WithJSON(map[string]any{"hello": "world"}),
+		&out,
+	)
+	if err != nil {
+		log.Fatalf("call failed: %v", err)
+	}
+
+	fmt.Printf("%v\n", out)
 }
 
 // ExampleClient_Do shows a JSON POST body through Client.Do.
@@ -52,7 +76,7 @@ func ExampleClient_Do() {
 	}
 
 	var out map[string]any
-	if err := resp.JSON(&out); err != nil {
+	if err := resp.ToJSON(&out); err != nil {
 		log.Fatalf("decode failed: %v", err)
 	}
 

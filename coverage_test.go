@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -83,15 +84,81 @@ func TestTrivialBuildersAndOptions(t *testing.T) {
 	resp := &Response{Body: []byte(`{"k":1}`)}
 
 	var m map[string]int
-	if err := resp.JSON(&m); err != nil || m["k"] != 1 {
-		t.Errorf("Response.JSON = %v %v", err, m)
+	if err := resp.ToJSON(&m); err != nil || m["k"] != 1 {
+		t.Errorf("Response.ToJSON = %v %v", err, m)
 	}
 }
 
-func TestResponseJSONError(t *testing.T) {
+func TestResponseToJSONError(t *testing.T) {
 	var v map[string]int
-	if err := (&Response{Body: []byte("not json")}).JSON(&v); err == nil {
+	if err := (&Response{Body: []byte("not json")}).ToJSON(&v); err == nil {
 		t.Error("expected decode error")
+	}
+}
+
+// TestToJSONRejectsDuplicateKeys pins the encoding/json/v2 semantics: unlike
+// v1 (which silently kept the last value), v2 errors on duplicate object keys.
+func TestToJSONRejectsDuplicateKeys(t *testing.T) {
+	var m map[string]any
+	if err := (&Response{Body: []byte(`{"a":1,"a":2}`)}).ToJSON(&m); err == nil {
+		t.Error("expected duplicate-key error from encoding/json/v2")
+	}
+}
+
+func TestResponseToBytes(t *testing.T) {
+	r := &Response{Body: []byte("raw")}
+	if string(r.ToBytes()) != "raw" || r.ToString() != "raw" {
+		t.Error("ToBytes/ToString mismatch")
+	}
+}
+
+func TestDoJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"k":"v"}`)
+	}))
+	defer srv.Close()
+
+	var out struct {
+		K string `json:"k"`
+	}
+
+	resp, err := New(WithBaseURL(srv.URL)).DoJSON(context.Background(),
+		NewRequest(MethodGet).WithAPI("A").WithVersion("v1"), &out)
+	if err != nil || out.K != "v" || resp.StatusCode != 200 {
+		t.Fatalf("DoJSON: out=%+v resp=%v err=%v", out, resp, err)
+	}
+}
+
+func TestDoJSONDecodeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "not-json")
+	}))
+	defer srv.Close()
+
+	var out map[string]any
+	if _, err := New(WithBaseURL(srv.URL)).DoJSON(context.Background(),
+		NewRequest(MethodGet).WithAPI("A").WithVersion("v1"), &out); err == nil {
+		t.Error("expected decode error")
+	}
+}
+
+func TestDoJSONStatusError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+		_, _ = io.WriteString(w, `{"error":"x"}`)
+	}))
+	defer srv.Close()
+
+	out := map[string]any{"sentinel": true}
+	_, err := New(WithBaseURL(srv.URL)).DoJSON(context.Background(),
+		NewRequest(MethodGet).WithAPI("A").WithVersion("v1"), &out)
+
+	if _, ok := errors.AsType[*StatusError](err); !ok {
+		t.Fatalf("expected StatusError, got %v", err)
+	}
+	// out must be untouched when the status check fails.
+	if len(out) != 1 || out["sentinel"] != true {
+		t.Errorf("out was mutated on status error: %v", out)
 	}
 }
 
@@ -225,8 +292,8 @@ func TestRetryTransientTransportError(t *testing.T) {
 		t.Fatalf("Do() error = %v", err)
 	}
 
-	if resp.String() != "ok" || calls != 2 {
-		t.Errorf("resp=%q calls=%d, want ok/2", resp.String(), calls)
+	if resp.ToString() != "ok" || calls != 2 {
+		t.Errorf("resp=%q calls=%d, want ok/2", resp.ToString(), calls)
 	}
 }
 
